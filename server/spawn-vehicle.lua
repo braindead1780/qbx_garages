@@ -24,6 +24,28 @@ local function payDepotPrice(player, depotPrice)
     return false
 end
 
+---@param accessPoint AccessPoint
+---@return vector4?
+local function getAvailableSpawnPoint(accessPoint)
+    local spawnPoints = accessPoint.spawnPoints
+    if not spawnPoints or #spawnPoints == 0 then
+        return
+    end
+
+    for i = 1, #spawnPoints do
+        local spawnPoint = spawnPoints[i]
+
+        if not Config.distanceCheck then
+            return spawnPoint
+        end
+
+        local nearbyVehicle = lib.getClosestVehicle(vec3(spawnPoint.x, spawnPoint.y, spawnPoint.z), Config.distanceCheck, false)
+        if not nearbyVehicle then
+            return spawnPoint
+        end
+    end
+end
+
 ---@param source number
 ---@param vehicleId integer
 ---@param garageName string
@@ -38,14 +60,11 @@ lib.callback.register('qbx_garages:server:spawnVehicle', function (source, vehic
     end
     local garageType = GetGarageType(garageName)
 
-    local spawnCoords = accessPoint.spawn or accessPoint.coords
-    if Config.distanceCheck then
-        local vec3Coords = vec3(spawnCoords.x, spawnCoords.y, spawnCoords.z)
-        local nearbyVehicle = lib.getClosestVehicle(vec3Coords, Config.distanceCheck, false)
-        if nearbyVehicle then
-            exports.qbx_core:Notify(source, locale('error.no_space'), 'error')
-            return
-        end
+    local spawnCoords = getAvailableSpawnPoint(accessPoint)
+    if not spawnCoords then
+        lib.print.error(string.format('garage %s access point %s has no free configured spawnPoints', garageName, accessPointIndex))
+        exports.qbx_core:Notify(source, locale('error.no_space'), 'error')
+        return
     end
 
     local filter = GetPlayerVehicleFilter(source, garageName)
