@@ -23,6 +23,9 @@ return {
     ---@field blip? GarageBlip
     ---@field spawn? vector4 where the vehicle will spawn. Defaults to coords
     ---@field dropPoint? vector3 where a vehicle can be stored, Defaults to spawn or coords
+    ---@field polyZone? vector2[] polygon points defining the interaction zone. When set, uses lib.zones.poly instead of lib.zones.sphere.
+    ---@field polyZoneThickness? number vertical height of the poly zone in metres. Defaults to 4.0.
+    ---@field zoneRadius? number radius of the sphere zone in metres. Defaults to 5.0. Only used when polyZone is not set.
 
     ---@class GarageConfig
     ---@field label string -- Label for the garage
