@@ -341,7 +341,17 @@ local function createZones(garageName, garage, accessPoint, accessPointIndex)
                 setTextUI(nil)
             end,
             debug = config.debugPoly,
-        })
+        }
+
+        if accessPoint.polyZone then
+            zoneOptions.points = accessPoint.polyZone
+            zoneOptions.thickness = accessPoint.polyZoneThickness or 4.0
+            lib.zones.poly(zoneOptions)
+        else
+            zoneOptions.coords = accessPoint.coords
+            zoneOptions.radius = accessPoint.zoneRadius or 5.0
+            lib.zones.sphere(zoneOptions)
+        end
     end)
 end
 
