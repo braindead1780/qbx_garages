@@ -52,6 +52,62 @@ local function kickOutPeds(vehicle)
 end
 
 local spawnLock = false
+local activeTextUI
+
+---@param text string?
+local function setTextUI(text)
+    if activeTextUI == text then return end
+
+    if activeTextUI then
+        lib.hideTextUI()
+        activeTextUI = nil
+    end
+
+    if not text then return end
+
+    lib.showTextUI(text, config.textUI)
+    activeTextUI = text
+end
+
+---@param points vector3[]?
+---@param fallbackZ number
+---@return vector3[]?
+local function normalizePolyPoints(points, fallbackZ)
+    if not points then return end
+
+    local normalizedPoints = {}
+
+    for i = 1, #points do
+        local point = points[i]
+        normalizedPoints[i] = vec3(point.x, point.y, point.z or fallbackZ)
+    end
+
+    return normalizedPoints
+end
+
+---@param accessPoint AccessPoint
+---@return vector3[]?
+local function getGarageZonePoints(accessPoint)
+    return normalizePolyPoints(accessPoint.zonePoints, accessPoint.coords.z)
+end
+
+---@param garage GarageConfig
+---@return string?
+local function getGaragePrompt(garage)
+    if cache.vehicle and garage.type ~= GarageType.DEPOT then
+        return locale('info.park_e')
+    end
+
+    if cache.vehicle then
+        return nil
+    end
+
+    if garage.type == GarageType.DEPOT then
+        return locale('info.impound_e')
+    end
+
+    return locale('info.car_e')
+end
 
 ---@param vehicleId number
 ---@param garageName string
@@ -219,7 +275,7 @@ end
 ---@param vehicle number
 ---@param garageName string
 local function parkVehicle(vehicle, garageName)
-    if GetVehicleNumberOfPassengers(vehicle) ~= 1 then
+    if GetVehicleNumberOfPassengers(vehicle) == 0 then
         local isParkable = lib.callback.await('qbx_garages:server:isParkable', false, garageName, NetworkGetNetworkIdFromEntity(vehicle))
 
         if not isParkable then
@@ -257,50 +313,32 @@ end
 ---@param accessPointIndex integer
 local function createZones(garageName, garage, accessPoint, accessPointIndex)
     CreateThread(function()
-        accessPoint.dropPoint = accessPoint.dropPoint or accessPoint.spawn
-
-        local wasInVehicle = nil
-
-        local function getTextLabel()
-            if cache.vehicle then
-                return locale('info.park_e')
-            elseif garage.type == GarageType.DEPOT then
-                return locale('info.impound_e')
-            else
-                return locale('info.car_e')
-            end
+        local zonePoints = getGarageZonePoints(accessPoint)
+        if not zonePoints then
+            lib.print.error(('garage %s access point %s is missing required zonePoints'):format(garageName, accessPointIndex))
+            return
         end
 
-        local zoneOptions = {
-            onEnter = function()
-                wasInVehicle = cache.vehicle ~= nil
-                lib.showTextUI(getTextLabel())
-            end,
-            onExit = function()
-                wasInVehicle = nil
-                lib.hideTextUI()
-            end,
+        lib.zones.poly({
+            points = zonePoints,
+            thickness = config.garageZoneThickness,
             inside = function()
-                -- Refresh text UI when the player gets in or out of a vehicle while in the zone
-                local inVehicle = cache.vehicle ~= nil
-                if inVehicle ~= wasInVehicle then
-                    wasInVehicle = inVehicle
-                    lib.showTextUI(getTextLabel())
-                end
-
-                if accessPoint.dropPoint then
-                    config.drawDropOffMarker(accessPoint.dropPoint)
-                end
+                local prompt = getGaragePrompt(garage)
+                setTextUI(prompt)
                 config.drawGarageMarker(accessPoint.coords.xyz)
 
-                if IsControlJustReleased(0, 38) then
-                    if not checkCanAccess(garage) then return end
-                    if cache.vehicle and garage.type ~= GarageType.DEPOT then
-                        parkVehicle(cache.vehicle, garageName)
-                    else
-                        openGarageMenu(garageName, garage, accessPointIndex)
-                    end
+                if not prompt or not IsControlJustReleased(0, 38) then return end
+                if not checkCanAccess(garage) then return end
+
+                if cache.vehicle and garage.type ~= GarageType.DEPOT then
+                    parkVehicle(cache.vehicle, garageName)
+                    return
                 end
+
+                openGarageMenu(garageName, garage, accessPointIndex)
+            end,
+            onExit = function()
+                setTextUI(nil)
             end,
             debug = config.debugPoly,
         }
